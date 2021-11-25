@@ -2,8 +2,6 @@
 Functions to set up a SHETRAN catchment
 
 """
-import os
-import sys
 import itertools
 import datetime
 import pickle
@@ -11,14 +9,28 @@ import pickle
 import numpy as np
 import pandas as pd
 import xarray as xr
+import os
+from pathlib import Path
+import tarfile
 
 # -----------------------------------------------------------------------------
 # Global / input variables
 
-root = 'S:/'
+mask_path = Path(os.getenv('MASK_PATH', '/data/inputs/mask'))
+inputs_path = Path(os.getenv('INPUTS_PATH', '/data/inputs'))
+
+inputs_tar = inputs_path / 'inputs.tar'
+if inputs_tar.is_file():
+    with tarfile.open(inputs_tar) as f:
+        f.extractall(inputs_path)
+
+outputs_path = Path(os.getenv('OUTPUTS_PATH', '/data/outputs'))
+
+ukcp18_folder = inputs_path / "UKCP18_UK_12km"
+ukcp18_pet_folder = inputs_path / 'SHETRAN_GB_2021/ukcp18rcm_pet'
 
 # Open master input file (static fields)
-static_inputs_path = root + 'SHETRAN_GB_2021/inputs/SHETRANGB_data.p'
+static_inputs_path = inputs_path / 'SHETRAN_GB_2021/inputs/SHETRANGB_data.p'
 static_inputs = open(static_inputs_path, 'rb')
 ds = pickle.load(static_inputs)
 
@@ -32,11 +44,6 @@ static_field_details = {
     'LandCover': ['land_cover_lccs', '%d'],
     'Soil': ['soil_type', '%d'],
 }
-
-# Climate input folders
-prcp_input_folder = root + 'CEH-GEAR downloads/'
-tas_input_folder = root + 'CHESS_T/'
-pet_input_folder = root + 'CHESS/'
 
 # -----------------------------------------------------------------------------
 
@@ -88,7 +95,7 @@ def create_static_maps(xll, yll, ncols, nrows, cellsize, output_folder, headers,
                 array[array == orig_type] = new_type
         
         array[mask == nodata] = nodata
-        output_path = output_folder + catch + '_' + array_name + '.asc'
+        output_path = output_folder / (catch + '_' + array_name + '.asc')
         np.savetxt(
             output_path, array, fmt=array_details[1], header=headers, comments=''
         )
@@ -101,7 +108,7 @@ def create_static_maps(xll, yll, ncols, nrows, cellsize, output_folder, headers,
     
     # Also save mask
     np.savetxt(
-        output_folder + catch + '_Mask.asc', mask, fmt='%d', header=headers, 
+        output_folder / (catch + '_Mask.asc'), mask, fmt='%d', header=headers,
         comments=''
     )
     
@@ -129,144 +136,11 @@ def get_catchment_coords_ids(xll, yll, urx, ury, cellsize, mask):
     
     return(cat_coords, cell_ids)
 
-def make_series(
-    input_files, input_folder, xll, yll, urx, ury, variable, startime, endtime,
-    cat_coords, cell_ids, series_output_path, write_cell_id_map=False, 
-    map_output_path=None, map_hdrs=None
-    ):
-    """Make and save climate time series for an individual variable."""    
-    # Read time series for full grid of cells into df
-    dfs = []
-    for input_file in input_files:
-        input_path = os.path.join(input_folder, input_file)
-        
-        ds = xr.open_dataset(input_path)
-        if variable == 'rainfall_amount':
-            ds_sel = ds.sel(y=slice(ury, yll), x=slice(xll, urx))
-        else:
-            ds_sel = ds.drop(['lat', 'lon'])
-            ds_sel = ds_sel.sel(y=slice(yll, ury), x=slice(xll, urx))
-        df = ds_sel[variable].to_dataframe()
-        df = df.unstack(level=['y', 'x'])
-        
-        y_coords = list(df.columns.levels[1])
-        y_coords.sort(reverse=True)
-        x_coords = list(df.columns.levels[2])
-        x_coords.sort(reverse=False)
-        
-        df_ord = df.loc[:, list(itertools.product([variable], y_coords, x_coords))]
-        dfs.append(df_ord)
-        
-        ds.close()
-    
-    # Subset on time period and cells in catchment
-    df = pd.concat(dfs).sort_index().loc[startime:endtime]
-    tmp = np.asarray(df.columns[:])
-    all_coords = [(y,x) for _, y, x in tmp]
-    cat_indices = []
-    ind = 0
-    for all_pair in all_coords:
-        if all_pair in cat_coords:
-            cat_indices.append(ind)
-        ind += 1
-    df = df.iloc[:, cat_indices]
-    
-    # Convert from degK to degC if temperature
-    if variable == 'tas':
-        df -= 273.15
-
-    # Write outputs
-    headers = np.unique(cell_ids)
-    headers = headers[headers >= 1]
-    df.to_csv(series_output_path, index=False, float_format='%.2f', header=headers)
-    if write_cell_id_map:
-        np.savetxt(map_output_path, cell_ids, fmt='%d', header=map_hdrs, comments='')
 
 def get_date_components(date_string, fmt='%Y-%m-%d'):
     date = datetime.datetime.strptime(date_string, fmt)
     return(date.year, date.month, date.day)
 
-def create_climate_files(startime, endtime, mask_path, catch, output_folder):
-    """Create climate time series."""
-    start_year, _, _ = get_date_components(startime)
-    end_year, _, _ = get_date_components(endtime)
-    
-    # Precipitation input folders and file lists
-    prcp_input_files = [str(y) + '.nc' for y in range(start_year, end_year+1)]
-    
-    # Temperature input folders and file lists
-    tmp = sorted(os.listdir(tas_input_folder))
-    tas_input_files = []
-    for fn in tmp:
-        if int(fn.split('_')[-1][:4]) in range(start_year, end_year+1):
-            tas_input_files.append(fn)
-    
-    # PET input folders and file lists
-    tmp = sorted(os.listdir(pet_input_folder))
-    pet_input_files = []
-    for fn in tmp:
-        if int(fn.split('_')[-1][:4]) in range(start_year, end_year+1):
-            pet_input_files.append(fn)
-    
-    # Read catchment mask
-    mask, ncols, nrows, xll, yll, cellsize, hdrs = read_ascii_raster(
-        mask_path, data_type=np.int, return_metadata=True
-    )
-    
-    # ---
-    # Precipitation
-    
-    # Figure out coordinates of upper right
-    urx = xll + (ncols-1)*cellsize
-    ury = yll + (nrows-1)*cellsize
-    
-    # Get coordinates and IDs of cells inside catchment
-    cat_coords, cell_ids = get_catchment_coords_ids(xll, yll, urx, ury, cellsize, mask)
-    
-    # Make precipitation time series and cell ID map
-    series_output_path = output_folder + catch + '_Precip.csv'
-    map_output_path = output_folder + catch + '_Cells.asc'
-    if not os.path.exists(series_output_path):
-        make_series(
-            prcp_input_files, prcp_input_folder, xll, yll, urx, ury, 'rainfall_amount', 
-            startime, endtime, cat_coords, cell_ids, series_output_path, 
-            write_cell_id_map=True, map_output_path=map_output_path, map_hdrs=hdrs
-        )
-    
-    # ---
-    # Temperature
-    
-    # Cell centre ll coords
-    xll_cc = xll + 500.0
-    yll_cc = yll + 500.0
-    
-    # Figure out coordinates of upper right
-    urx_cc = xll_cc + (ncols-1)*cellsize
-    ury_cc = yll_cc + (nrows-1)*cellsize
-    
-    # Get coordinates and IDs of cells inside catchment
-    cat_coords_cc = []
-    for yv, xv in cat_coords:
-        cat_coords_cc.append((yv+500.0, xv+500.0))
-    
-    # Make temperature time series
-    series_output_path = output_folder + catch + '_Temp.csv'
-    if not os.path.exists(series_output_path):
-        make_series(
-            tas_input_files, tas_input_folder, xll_cc, yll_cc, urx_cc, ury_cc, 'tas', 
-            startime, endtime, cat_coords_cc, cell_ids, series_output_path
-        )
-    
-    # ---
-    # PET
-    
-    # Make PET time series
-    series_output_path = output_folder + catch + '_PET.csv'
-    if not os.path.exists(series_output_path):
-        make_series(
-            pet_input_files, pet_input_folder, xll_cc, yll_cc, urx_cc, ury_cc, 'pet', 
-            startime, endtime, cat_coords_cc, cell_ids, series_output_path
-        )
 
 def get_veg_string(veg):
     """Get string containing vegetation details for the library file."""
@@ -406,58 +280,132 @@ def create_library_file(
     ]
     output_string = '\n'.join(output_list)
     
-    f = open(output_folder + catch + "_LibraryFile.xml", "w")
+    f = open(output_folder / f"{catch}_LibraryFile.xml", "w")
     f.write(output_string)
     f.close()
 
-def process_catchment(catch, mask_path, startime, endtime, output_subfolder, q=None):
+
+def get_ukcp18_variable(variable, llx, lly, cellsize, ncols, nrows, m, scenario, outFileTS):
+    urx = llx + ncols * cellsize
+    ury = lly + nrows * cellsize
+
+    llx12 = int(llx / 12000) * 12000
+    lly12 = int(lly / 12000) * 12000
+
+    urx12 = (int(urx / 12000) + 1) * 12000
+    ury12 = (int(ury / 12000) + 1) * 12000
+
+    orderedDfs = []
+    for period in scenario:
+
+        subpath = (
+                m + "/" + variable + "/day/latest/" + variable
+                + "_rcp85_land-rcm_uk_12km_" + m + "_day_" + period + ".nc"
+        )
+        if variable == 'pet':
+            DS = xr.open_dataset(ukcp18_pet_folder / subpath)
+        else:
+            DS = xr.open_dataset(ukcp18_folder / subpath)
+
+        ds_subset = DS.sel(projection_y_coordinate=slice(lly12, ury12), projection_x_coordinate=slice(llx12, urx12))
+        df = ds_subset[variable].to_dataframe()
+
+        df = df.unstack(level=['projection_y_coordinate', 'projection_x_coordinate'])
+
+        yCoords = list(df.columns.levels[1])
+        yCoords.sort(reverse=True)
+
+        xCoords = list(df.columns.levels[2])
+        xCoords.sort(reverse=False)
+
+        orderedDf = df.loc[:, list(itertools.product([variable], yCoords, xCoords))]
+        orderedDfs.append(orderedDf)
+
+    all = pd.concat(orderedDfs)  # .sort_index()#.loc[startime:endtime]
+
+    all.to_csv(outFileTS, index=False, header=np.arange(1, len(all.columns) + 1))
+
+def process_catchment(catch, mask_path, time_horizon, ensemble_member, output_subfolder):
     """Create all files needed to run shetran-prepare."""
     print(catch)
     
     if not os.path.isdir(output_subfolder):
         os.mkdir(output_subfolder)
-    
-    try:
-    
-        # Read mask
-        mask, ncols, nrows, xll, yll, cellsize, headers = read_ascii_raster(
-            mask_path, data_type=np.int, return_metadata=True
-        )
-        
-        # Create static maps and return veg (land cover) and soil arrays/info
-        veg, soil, orig_soil_types, new_soil_types = create_static_maps(
-            xll, yll, ncols, nrows, cellsize, output_subfolder, headers, catch, mask
-        )
-        
-        # Create climate time series files (and cell ID map)
-        create_climate_files(startime, endtime, mask_path, catch, output_subfolder)
-        
-        # Get strings of vegetation and soil properties/details for library file
-        veg_string = get_veg_string(veg)
-        soil_types_string, soil_cols_string = get_soil_strings(
-            soil, orig_soil_types, new_soil_types
-        )
-        
-        # Create library file
-        create_library_file(
-            output_subfolder, catch, veg_string, soil_types_string, soil_cols_string,
-            startime, endtime
-        )
-        
-        #sys.exit()
-    
-    except:
-        pass
+
+    # Read mask
+    mask, ncols, nrows, xll, yll, cellsize, headers = read_ascii_raster(
+        mask_path, data_type=np.int, return_metadata=True
+    )
+
+    # Create static maps and return veg (land cover) and soil arrays/info
+    veg, soil, orig_soil_types, new_soil_types = create_static_maps(
+        xll, yll, ncols, nrows, cellsize, output_subfolder, headers, catch, mask
+    )
+
+    if time_horizon == 'control':
+        scenario = ['19801201-19901130', '19901201-20001130', '20001201-20101130']
+        startime = '1980-12-01'
+        endtime = '2010-11-30'
+    elif time_horizon == 'future':
+        scenario = ['20401201-20501130', '20501201-20601130', '20601201-20701130']
+        startime = '2040-12-01'
+        endtime = '2070-11-30'
+    else:
+        raise Exception('Time horizon must be either control or future')
+
+    for variable, output_name in [('pr', '_Precip.csv'), ('pet', "_PET.csv"), ('tas', "_Temp.csv")]:
+        get_ukcp18_variable(
+            variable,
+            llx=xll,
+            lly=yll,
+            cellsize=cellsize,
+            ncols=ncols,
+            nrows=nrows,
+            m=ensemble_member,
+            scenario=scenario,
+            outFileTS=output_subfolder/f'{catch}{output_name}')
+
+    idDict = {}
+    ticker = 1
+    newMap = np.arange(1, ncols * nrows + 1).reshape((nrows, ncols))
+
+    for j in range(nrows):
+        for i in range(ncols):
+            xc = int(((i * cellsize) + xll) / 12000)
+
+            yc = int((((nrows - 1 - j) * cellsize) + yll) / 12000)
+
+            id = str(xc) + "," + str(yc)
+
+            if id not in idDict.keys():
+                idDict[id] = ticker
+                ticker += 1
+            else:
+                pass
+
+            newMap[j][i] = idDict[id]
+
+    head = 'ncols\t' + str(ncols) + '\nnrows\t' + str(nrows) + '\nxllcorner\t' + str(xll) + '\nyllcorner\t' + str(
+        yll) + '\ncellsize\t' + str(cellsize) + '\nNODATA_value\t-9999'
+    np.savetxt(outputs_path / f"{catch}_Cells.asc", newMap, delimiter=' ', header=head, fmt='%.0f', comments='')
+
+    # Get strings of vegetation and soil properties/details for library file
+    veg_string = get_veg_string(veg)
+    soil_types_string, soil_cols_string = get_soil_strings(
+        soil, orig_soil_types, new_soil_types
+    )
+
+    # Create library file
+    create_library_file(
+        output_subfolder, catch, veg_string, soil_types_string, soil_cols_string,
+        startime, endtime
+    )
 
 
+if __name__ == '__main__':
+    catch = os.getenv('CATCHMENT_ID')
+    mask_path = mask_path.glob('*.asc').__next__()
+    time_horizon = os.getenv('TIME_HORIZON', 'future')
+    ensemble_member = os.getenv('ENSEMBLE_MEMBER', '01')
 
-
-
-
-
-
-
-
-
-
-
+    process_catchment(catch, mask_path, time_horizon, ensemble_member, outputs_path)
