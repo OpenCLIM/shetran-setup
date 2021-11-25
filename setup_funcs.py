@@ -237,7 +237,7 @@ def create_library_file(
         '<ProjectFile>{}_ProjectFile</ProjectFile>'.format(catch),
         '<CatchmentName>{}</CatchmentName>'.format(catch),
         '<DEMMeanFileName>{}_DEM.asc</DEMMeanFileName>'.format(catch),
-        '<DEMminFileName>{}_MinDEM.asc</DEMMinFileName>'.format(catch),
+        '<DEMMinFileName>{}_MinDEM.asc</DEMMinFileName>'.format(catch),
         '<MaskFileName>{}_Mask.asc</MaskFileName>'.format(catch),
         '<VegMap>{}_LandCover.asc</VegMap>'.format(catch),
         '<SoilMap>{}_Soil.asc</SoilMap>'.format(catch),
