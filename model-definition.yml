@@ -77,4 +77,4 @@ spec:
         default:
           - 372328e2-6ecf-4284-bd1d-0c56492092f7
         path: inputs
-        required: false
+        required: true
