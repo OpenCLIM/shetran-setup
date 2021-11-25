@@ -1,0 +1,6 @@
+# comment
+data
+data/**/*
+misc
+misc/**/*
+*.tar.gz
