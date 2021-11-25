@@ -87,11 +87,13 @@ spec:
       - name: Mask
         description: Mask of the catchment to set up
         default:
-          - 859e810c-4597-44b6-8d92-a9f00e45dcbd
+          - a885cf26-8dc5-45d6-9221-a46ccc0e852a
         path: inputs/mask
         required: true
 
       - name: Input data
         description: UKCP18 and static data in a single TAR file
+        default:
+          - 372328e2-6ecf-4284-bd1d-0c56492092f7
         path: inputs
         required: false
