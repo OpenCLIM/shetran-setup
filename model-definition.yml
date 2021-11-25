@@ -64,25 +64,6 @@ spec:
           - name: '15'
             title: '15'
 
-      - name: DURATION
-        title: Duration (hours)
-        description: The duration of the rainfall event
-        type: string
-        default: '1'
-        required: true
-        options:
-          - name: '1'
-            title: '1'
-          - name: '3'
-            title: '3'
-          - name: '6'
-            title: '6'
-          - name: '12'
-            title: '12'
-          - name: '24'
-            title: '24'
-
-
     dataslots:
       - name: Mask
         description: Mask of the catchment to set up
