@@ -1,0 +1,97 @@
+kind: Model
+api_version: v1beta1
+metadata:
+  display_name: SHETRAN Setup
+  name: shetran-setup
+  publisher: Newcastle University
+  summary: Creates input data for SHETRAN based on a catchment mask
+  source_code: https://github.com/OpenCLIM/shetran-setup
+  description: >
+    Sets up input data using UKCP18 12km projections for rainfall, PET and temperature.
+    Either 1980-2010 (control) or 2040-2070 (future) scenarios can be modelled.
+    Any catchment mask within the UK can be used to generate SHETRAN inputs.
+spec:
+  inputs:
+    parameters:
+      - name: CATCHMENT_ID
+        title: Catchment ID
+        type: string
+        description: The ID number of the catchment, used for naming input files
+        default: 1001
+        required: true
+
+      - name: TIME_HORIZON
+        title: Time horizon
+        description: Whether to model the control or future time horizon
+        type: string
+        default: 'future'
+        required: false
+        options:
+          - name: 'future'
+            title: 'future'
+          - name: 'control'
+            title: 'control'
+
+      - name: ENSEMBLE_MEMBER
+        title: Ensemble member
+        description: The ID of the UKCP18 ensemble member to use
+        type: string
+        default: '01'
+        required: false
+        options:
+          - name: '01'
+            title: '01'
+          - name: '04'
+            title: '04'
+          - name: '05'
+            title: '05'
+          - name: '06'
+            title: '06'
+          - name: '07'
+            title: '07'
+          - name: '08'
+            title: '08'
+          - name: '09'
+            title: '09'
+          - name: '10'
+            title: '10'
+          - name: '11'
+            title: '11'
+          - name: '12'
+            title: '12'
+          - name: '13'
+            title: '13'
+          - name: '15'
+            title: '15'
+
+      - name: DURATION
+        title: Duration (hours)
+        description: The duration of the rainfall event
+        type: string
+        default: '1'
+        required: true
+        options:
+          - name: '1'
+            title: '1'
+          - name: '3'
+            title: '3'
+          - name: '6'
+            title: '6'
+          - name: '12'
+            title: '12'
+          - name: '24'
+            title: '24'
+
+
+    dataslots:
+      - name: Mask
+        description: Mask of the catchment to set up
+        default:
+          - 859e810c-4597-44b6-8d92-a9f00e45dcbd
+        path: inputs/mask
+        required: true
+
+      - name: Input data
+        description: UKCP18 and static data in a single TAR file
+        path: inputs
+        required: false
