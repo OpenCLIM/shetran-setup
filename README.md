@@ -1,5 +1,9 @@
 # SHETRAN GB Setup
 
+
+[![release](https://img.shields.io/github/v/release/openclim/shetran-setup)](https://github.com/OpenCLIM/shetran-setup/releases/latest)
+[![build](https://github.com/OpenCLIM/shetran-setup/actions/workflows/build.yml/badge.svg)](https://github.com/OpenCLIM/shetran-setup/actions/workflows/build.yml)
+
 This DAFNI model generates input files for SHETRAN based on a catchment mask.
 
 ## Usage 
