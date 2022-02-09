@@ -8,7 +8,7 @@ metadata:
   source_code: https://github.com/OpenCLIM/shetran-setup
   description: >
     Sets up input data using UKCP18 12km projections for rainfall, PET and temperature.
-    Either 1980-2010 (control) or 2040-2070 (future) scenarios can be modelled.
+    Either 1980-2010 (control) or 2040-2070 (future) scenarios can be modelled using 1 of 12 ensemble members.
     Any catchment mask within the UK can be used to generate SHETRAN inputs.
 spec:
   inputs:
@@ -66,15 +66,24 @@ spec:
 
     dataslots:
       - name: Mask
-        description: Mask of the catchment to set up
+        description: Mask of the catchment to set up. This must be located in Great Britain.
         default:
           - a885cf26-8dc5-45d6-9221-a46ccc0e852a
         path: inputs/mask
         required: true
 
       - name: Input data
-        description: UKCP18 and static data in a single TAR file
+        description: >
+          A single TAR file containing PET, precipitation and temperature from UKCP18
+          and static data from CAMELS-GB and other sources.
         default:
           - 372328e2-6ecf-4284-bd1d-0c56492092f7
         path: inputs
         required: true
+
+  outputs:
+    datasets:
+      - name: outputs
+        type: folder
+        description:
+          SHETRAN input files. All file names are prefixed with the CATCHMENT_ID.
